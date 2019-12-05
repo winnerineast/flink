@@ -43,6 +43,7 @@ import org.apache.flink.runtime.resourcemanager.SlotRequest;
 import org.apache.flink.runtime.rest.messages.taskmanager.TaskManagerInfo;
 import org.apache.flink.runtime.taskexecutor.FileType;
 import org.apache.flink.runtime.taskexecutor.SlotReport;
+import org.apache.flink.runtime.taskexecutor.TaskExecutorHeartbeatPayload;
 import org.apache.flink.runtime.taskexecutor.TaskExecutorRegistrationSuccess;
 import org.apache.flink.util.Preconditions;
 
@@ -86,7 +87,7 @@ public class TestingResourceManagerGateway implements ResourceManagerGateway {
 
 	private volatile Function<Tuple3<ResourceID, InstanceID, SlotReport>, CompletableFuture<Acknowledge>> sendSlotReportFunction;
 
-	private volatile BiConsumer<ResourceID, SlotReport> taskExecutorHeartbeatConsumer;
+	private volatile BiConsumer<ResourceID, TaskExecutorHeartbeatPayload> taskExecutorHeartbeatConsumer;
 
 	private volatile Consumer<Tuple3<InstanceID, SlotID, AllocationID>> notifySlotAvailableConsumer;
 
@@ -152,7 +153,7 @@ public class TestingResourceManagerGateway implements ResourceManagerGateway {
 		this.sendSlotReportFunction = sendSlotReportFunction;
 	}
 
-	public void setTaskExecutorHeartbeatConsumer(BiConsumer<ResourceID, SlotReport> taskExecutorHeartbeatConsumer) {
+	public void setTaskExecutorHeartbeatConsumer(BiConsumer<ResourceID, TaskExecutorHeartbeatPayload> taskExecutorHeartbeatConsumer) {
 		this.taskExecutorHeartbeatConsumer = taskExecutorHeartbeatConsumer;
 	}
 
@@ -246,11 +247,11 @@ public class TestingResourceManagerGateway implements ResourceManagerGateway {
 	}
 
 	@Override
-	public void heartbeatFromTaskManager(ResourceID heartbeatOrigin, SlotReport slotReport) {
-		final BiConsumer<ResourceID, SlotReport> currentTaskExecutorHeartbeatConsumer = taskExecutorHeartbeatConsumer;
+	public void heartbeatFromTaskManager(ResourceID heartbeatOrigin, TaskExecutorHeartbeatPayload heartbeatPayload) {
+		final BiConsumer<ResourceID, TaskExecutorHeartbeatPayload> currentTaskExecutorHeartbeatConsumer = taskExecutorHeartbeatConsumer;
 
 		if (currentTaskExecutorHeartbeatConsumer != null) {
-			currentTaskExecutorHeartbeatConsumer.accept(heartbeatOrigin, slotReport);
+			currentTaskExecutorHeartbeatConsumer.accept(heartbeatOrigin, heartbeatPayload);
 		}
 	}
 
@@ -293,7 +294,7 @@ public class TestingResourceManagerGateway implements ResourceManagerGateway {
 	}
 
 	@Override
-	public CompletableFuture<Collection<Tuple2<ResourceID, String>>> requestTaskManagerMetricQueryServicePaths(Time timeout) {
+	public CompletableFuture<Collection<Tuple2<ResourceID, String>>> requestTaskManagerMetricQueryServiceAddresses(Time timeout) {
 		return CompletableFuture.completedFuture(Collections.emptyList());
 	}
 

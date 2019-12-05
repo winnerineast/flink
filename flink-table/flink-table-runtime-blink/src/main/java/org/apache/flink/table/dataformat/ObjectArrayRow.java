@@ -17,6 +17,7 @@
 
 package org.apache.flink.table.dataformat;
 
+import org.apache.flink.table.dataformat.util.BaseRowUtil;
 import org.apache.flink.util.StringUtils;
 
 import java.util.Arrays;
@@ -65,6 +66,11 @@ public abstract class ObjectArrayRow implements BaseRow {
 	}
 
 	@Override
+	public void setTimestamp(int ordinal, SqlTimestamp value, int precision) {
+		this.fields[ordinal] = value;
+	}
+
+	@Override
 	public BinaryString getString(int ordinal) {
 		return (BinaryString) this.fields[ordinal];
 	}
@@ -75,18 +81,23 @@ public abstract class ObjectArrayRow implements BaseRow {
 	}
 
 	@Override
-	public BinaryArray getArray(int ordinal) {
-		return (BinaryArray) this.fields[ordinal];
+	public BaseArray getArray(int ordinal) {
+		return (BaseArray) this.fields[ordinal];
 	}
 
 	@Override
-	public BinaryMap getMap(int ordinal) {
-		return (BinaryMap) this.fields[ordinal];
+	public BaseMap getMap(int ordinal) {
+		return (BaseMap) this.fields[ordinal];
 	}
 
 	@Override
 	public Decimal getDecimal(int ordinal, int precision, int scale) {
 		return (Decimal) this.fields[ordinal];
+	}
+
+	@Override
+	public SqlTimestamp getTimestamp(int ordinal, int precision) {
+		return (SqlTimestamp) this.fields[ordinal];
 	}
 
 	@Override
@@ -102,13 +113,20 @@ public abstract class ObjectArrayRow implements BaseRow {
 	@Override
 	public String toString() {
 		StringBuilder sb = new StringBuilder();
-		sb.append(getHeader()).append("|");
+		sb.append("(");
+		if (BaseRowUtil.isAccumulateMsg(this)) {
+			sb.append("+");
+		} else {
+			sb.append("-");
+		}
+		sb.append("|");
 		for (int i = 0; i < fields.length; i++) {
 			if (i != 0) {
 				sb.append(",");
 			}
 			sb.append(StringUtils.arrayAwareToString(fields[i]));
 		}
+		sb.append(")");
 		return sb.toString();
 	}
 

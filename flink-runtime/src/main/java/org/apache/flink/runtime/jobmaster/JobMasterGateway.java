@@ -18,9 +18,7 @@
 
 package org.apache.flink.runtime.jobmaster;
 
-import java.util.Collection;
-import java.util.concurrent.CompletableFuture;
-import javax.annotation.Nullable;
+import org.apache.flink.api.common.JobStatus;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.time.Time;
 import org.apache.flink.runtime.checkpoint.CheckpointCoordinatorGateway;
@@ -34,7 +32,6 @@ import org.apache.flink.runtime.executiongraph.ExecutionVertex;
 import org.apache.flink.runtime.io.network.partition.ResultPartition;
 import org.apache.flink.runtime.io.network.partition.ResultPartitionID;
 import org.apache.flink.runtime.jobgraph.IntermediateDataSetID;
-import org.apache.flink.runtime.jobgraph.JobStatus;
 import org.apache.flink.runtime.jobgraph.JobVertexID;
 import org.apache.flink.runtime.messages.Acknowledge;
 import org.apache.flink.runtime.messages.webmonitor.JobDetails;
@@ -47,6 +44,11 @@ import org.apache.flink.runtime.taskexecutor.AccumulatorReport;
 import org.apache.flink.runtime.taskexecutor.slot.SlotOffer;
 import org.apache.flink.runtime.taskmanager.TaskExecutionState;
 import org.apache.flink.runtime.taskmanager.TaskManagerLocation;
+
+import javax.annotation.Nullable;
+
+import java.util.Collection;
+import java.util.concurrent.CompletableFuture;
 
 /**
  * {@link JobMaster} rpc gateway interface.
@@ -64,42 +66,6 @@ public interface JobMasterGateway extends
 	 * @return Future acknowledge of the operation
 	 */
 	CompletableFuture<Acknowledge> cancel(@RpcTimeout Time timeout);
-
-	/**
-	 * Cancel the currently executed job.
-	 *
-	 * @param timeout of this operation
-	 * @return Future acknowledge if the cancellation was successful
-	 */
-	CompletableFuture<Acknowledge> stop(@RpcTimeout Time timeout);
-
-	/**
-	 * Triggers rescaling of the executed job.
-	 *
-	 * @param newParallelism new parallelism of the job
-	 * @param rescalingBehaviour defining how strict the rescaling has to be executed
-	 * @param timeout of this operation
-	 * @return Future which is completed with {@link Acknowledge} once the rescaling was successful
-	 */
-	CompletableFuture<Acknowledge> rescaleJob(
-		int newParallelism,
-		RescalingBehaviour rescalingBehaviour,
-		@RpcTimeout Time timeout);
-
-	/**
-	 * Triggers rescaling of the given set of operators.
-	 *
-	 * @param operators set of operators which shall be rescaled
-	 * @param newParallelism new parallelism of the given set of operators
-	 * @param rescalingBehaviour defining how strict the rescaling has to be executed
-	 * @param timeout of this operation
-	 * @return Future which is completed with {@link Acknowledge} once the rescaling was successful
-	 */
-	CompletableFuture<Acknowledge> rescaleOperators(
-		Collection<JobVertexID> operators,
-		int newParallelism,
-		RescalingBehaviour rescalingBehaviour,
-		@RpcTimeout Time timeout);
 
 	/**
 	 * Updates the task execution state for a given task.
@@ -261,6 +227,21 @@ public interface JobMasterGateway extends
 	CompletableFuture<String> triggerSavepoint(
 		@Nullable final String targetDirectory,
 		final boolean cancelJob,
+		@RpcTimeout final Time timeout);
+
+	/**
+	 * Stops the job with a savepoint.
+	 *
+	 * @param targetDirectory to which to write the savepoint data or null if the
+	 *                           default savepoint directory should be used
+	 * @param advanceToEndOfEventTime Flag indicating if the source should inject a {@code MAX_WATERMARK} in the pipeline
+	 *                              to fire any registered event-time timers
+	 * @param timeout for the rpc call
+	 * @return Future which is completed with the savepoint path once completed
+	 */
+	CompletableFuture<String> stopWithSavepoint(
+		@Nullable final String targetDirectory,
+		final boolean advanceToEndOfEventTime,
 		@RpcTimeout final Time timeout);
 
 	/**

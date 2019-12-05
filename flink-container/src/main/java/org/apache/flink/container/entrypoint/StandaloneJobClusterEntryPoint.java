@@ -18,14 +18,16 @@
 
 package org.apache.flink.container.entrypoint;
 
+import org.apache.flink.annotation.VisibleForTesting;
 import org.apache.flink.api.common.JobID;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.runtime.entrypoint.ClusterEntrypoint;
 import org.apache.flink.runtime.entrypoint.JobClusterEntrypoint;
+import org.apache.flink.runtime.entrypoint.component.DefaultDispatcherResourceManagerComponentFactory;
 import org.apache.flink.runtime.entrypoint.component.DispatcherResourceManagerComponentFactory;
-import org.apache.flink.runtime.entrypoint.component.JobDispatcherResourceManagerComponentFactory;
 import org.apache.flink.runtime.entrypoint.parser.CommandLineParser;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
+import org.apache.flink.runtime.jobmanager.HighAvailabilityMode;
 import org.apache.flink.runtime.resourcemanager.StandaloneResourceManagerFactory;
 import org.apache.flink.runtime.util.EnvironmentInformation;
 import org.apache.flink.runtime.util.JvmShutdownSafeguard;
@@ -34,13 +36,19 @@ import org.apache.flink.runtime.util.SignalHandler;
 import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 
+import java.io.IOException;
+import java.util.Optional;
+
 import static java.util.Objects.requireNonNull;
+import static org.apache.flink.runtime.util.ClusterEntrypointUtils.tryFindUserLibDirectory;
 
 /**
  * {@link JobClusterEntrypoint} which is started with a job in a predefined
  * location.
  */
 public final class StandaloneJobClusterEntryPoint extends JobClusterEntrypoint {
+
+	public static final JobID ZERO_JOB_ID = new JobID(0, 0);
 
 	@Nonnull
 	private final JobID jobId;
@@ -68,10 +76,14 @@ public final class StandaloneJobClusterEntryPoint extends JobClusterEntrypoint {
 	}
 
 	@Override
-	protected DispatcherResourceManagerComponentFactory<?> createDispatcherResourceManagerComponentFactory(Configuration configuration) {
-		return new JobDispatcherResourceManagerComponentFactory(
+	protected DispatcherResourceManagerComponentFactory createDispatcherResourceManagerComponentFactory(Configuration configuration) throws IOException {
+		final ClassPathJobGraphRetriever.Builder classPathJobGraphRetrieverBuilder = ClassPathJobGraphRetriever.newBuilder(jobId, savepointRestoreSettings, programArguments)
+			.setJobClassName(jobClassName);
+		tryFindUserLibDirectory().ifPresent(classPathJobGraphRetrieverBuilder::setUserLibDirectory);
+
+		return DefaultDispatcherResourceManagerComponentFactory.createJobComponentFactory(
 			StandaloneResourceManagerFactory.INSTANCE,
-			new ClassPathJobGraphRetriever(jobId, savepointRestoreSettings, programArguments, jobClassName));
+			classPathJobGraphRetrieverBuilder.build());
 	}
 
 	public static void main(String[] args) {
@@ -92,16 +104,42 @@ public final class StandaloneJobClusterEntryPoint extends JobClusterEntrypoint {
 		}
 
 		Configuration configuration = loadConfiguration(clusterConfiguration);
-
-		configuration.setString(ClusterEntrypoint.EXECUTION_MODE, ExecutionMode.DETACHED.toString());
+		setDefaultExecutionModeIfNotConfigured(configuration);
 
 		StandaloneJobClusterEntryPoint entrypoint = new StandaloneJobClusterEntryPoint(
 			configuration,
-			clusterConfiguration.getJobId(),
+			resolveJobIdForCluster(Optional.ofNullable(clusterConfiguration.getJobId()), configuration),
 			clusterConfiguration.getSavepointRestoreSettings(),
 			clusterConfiguration.getArgs(),
 			clusterConfiguration.getJobClassName());
 
 		ClusterEntrypoint.runClusterEntrypoint(entrypoint);
+	}
+
+	@VisibleForTesting
+	@Nonnull
+	static JobID resolveJobIdForCluster(Optional<JobID> optionalJobID, Configuration configuration) {
+		return optionalJobID.orElseGet(() -> createJobIdForCluster(configuration));
+	}
+
+	@Nonnull
+	private static JobID createJobIdForCluster(Configuration globalConfiguration) {
+		if (HighAvailabilityMode.isHighAvailabilityModeActivated(globalConfiguration)) {
+			return ZERO_JOB_ID;
+		} else {
+			return JobID.generate();
+		}
+	}
+
+	@VisibleForTesting
+	static void setDefaultExecutionModeIfNotConfigured(Configuration configuration) {
+		if (isNoExecutionModeConfigured(configuration)) {
+			// In contrast to other places, the default for standalone job clusters is ExecutionMode.DETACHED
+			configuration.setString(ClusterEntrypoint.EXECUTION_MODE, ExecutionMode.DETACHED.toString());
+		}
+	}
+
+	private static boolean isNoExecutionModeConfigured(Configuration configuration) {
+		return configuration.getString(ClusterEntrypoint.EXECUTION_MODE, null) == null;
 	}
 }
